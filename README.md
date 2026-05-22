@@ -1,4 +1,4 @@
-# 🎭 Gaynonimous Chat Bot
+# 🏳️‍🌈 Gaynonimous Chat Bot
 
 > **Bot Telegram anonymous chat 1-lawan-1** dengan sistem keamanan media approval, peringatan scam bawaan, dan siap deploy ke Railway.
 
