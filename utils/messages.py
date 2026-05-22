@@ -71,11 +71,12 @@ ALREADY_IN_CHAT = "\U0001f4ac Kamu sudah dalam obrolan. Akhiri dulu untuk mencar
 
 
 def profile_text(user_id: int, total_chats: int, member_since: str) -> str:
+    stars = "\u2b50" * min(5, max(1, total_chats // 5))
     return (
         f"\U0001f464 *Profil Kamu*\n\n"
         f"\U0001f194 ID Anonim: `#{user_id % 99999:05d}`\n"
         f"\U0001f4ac Total Obrolan: `{total_chats}`\n"
         f"\U0001f4c5 Bergabung: {member_since}\n"
-        f"\U0001f3c6 Reputasi: {'\u2b50' * min(5, max(1, total_chats // 5))} ({total_chats} chat)\n\n"
+        f"\U0001f3c6 Reputasi: {stars} ({total_chats} chat)\n\n"
         f"_Identitas aslimu tetap tersembunyi dari semua pengguna._"
     )
