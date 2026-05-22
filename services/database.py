@@ -3,13 +3,15 @@ Database service - PostgreSQL (Railway) dan SQLite (local) dengan SQLAlchemy.
 """
 import os
 import logging
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
+from typing import Optional, List
 from sqlalchemy import (
     create_engine, Column, Integer, BigInteger, String, Boolean,
-    DateTime, Text, Enum as SAEnum, text
+    DateTime, Text,
 )
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from config.settings import DATABASE_URL, SQLITE_URL, USE_POSTGRES
 
 logger = logging.getLogger(__name__)
@@ -55,6 +57,59 @@ class EventLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+# ---- Dataclasses sebagai DTO (Data Transfer Object) ----
+# Digunakan agar data user/report bisa diakses setelah session ditutup
+
+@dataclass
+class UserDTO:
+    telegram_id: int
+    username: Optional[str]
+    first_name: Optional[str]
+    is_banned: bool
+    ban_reason: Optional[str]
+    total_chats: int
+    report_count: int
+    created_at: Optional[datetime]
+    last_seen: Optional[datetime]
+
+
+@dataclass
+class ReportDTO:
+    id: int
+    reporter_id: int
+    reported_id: int
+    reason: Optional[str]
+    created_at: Optional[datetime]
+    reviewed: bool
+
+
+def _user_to_dto(user: User) -> UserDTO:
+    return UserDTO(
+        telegram_id=user.telegram_id,
+        username=user.username,
+        first_name=user.first_name,
+        is_banned=user.is_banned,
+        ban_reason=user.ban_reason,
+        total_chats=user.total_chats or 0,
+        report_count=user.report_count or 0,
+        created_at=user.created_at,
+        last_seen=user.last_seen,
+    )
+
+
+def _report_to_dto(report: Report) -> ReportDTO:
+    return ReportDTO(
+        id=report.id,
+        reporter_id=report.reporter_id,
+        reported_id=report.reported_id,
+        reason=report.reason,
+        created_at=report.created_at,
+        reviewed=report.reviewed,
+    )
+
+
+# ---- Engine & Session ----
+
 def get_engine():
     if USE_POSTGRES:
         url = DATABASE_URL
@@ -69,20 +124,38 @@ engine = get_engine()
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 
+@contextmanager
+def get_session():
+    """Context manager yang aman untuk SQLAlchemy session."""
+    session = SessionLocal()
+    try:
+        yield session
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     logger.info("Database initialized.")
 
 
-def get_session() -> Session:
-    return SessionLocal()
+# ---- CRUD Functions ----
 
-
-def get_or_create_user(telegram_id: int, username: str = None, first_name: str = None) -> User:
+def get_or_create_user(
+    telegram_id: int, username: str = None, first_name: str = None
+) -> UserDTO:
+    """Ambil atau buat user, kembalikan sebagai DTO (safe setelah session tutup)."""
     with get_session() as session:
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
         if not user:
-            user = User(telegram_id=telegram_id, username=username, first_name=first_name)
+            user = User(
+                telegram_id=telegram_id,
+                username=username,
+                first_name=first_name,
+            )
             session.add(user)
             session.commit()
             session.refresh(user)
@@ -93,7 +166,7 @@ def get_or_create_user(telegram_id: int, username: str = None, first_name: str =
             if first_name:
                 user.first_name = first_name
             session.commit()
-        return user
+        return _user_to_dto(user)
 
 
 def is_user_banned(telegram_id: int) -> bool:
@@ -122,19 +195,26 @@ def unban_user(telegram_id: int):
 
 def add_report(reporter_id: int, reported_id: int, reason: str = None):
     with get_session() as session:
-        report = Report(reporter_id=reporter_id, reported_id=reported_id, reason=reason)
+        report = Report(
+            reporter_id=reporter_id,
+            reported_id=reported_id,
+            reason=reason,
+        )
         session.add(report)
         reported_user = session.query(User).filter_by(telegram_id=reported_id).first()
         if reported_user:
-            reported_user.report_count += 1
+            reported_user.report_count = (reported_user.report_count or 0) + 1
         session.commit()
 
 
 def log_event(event_type: str, user_id: int = None, detail: str = None):
-    with get_session() as session:
-        log = EventLog(event_type=event_type, user_id=user_id, detail=detail)
-        session.add(log)
-        session.commit()
+    try:
+        with get_session() as session:
+            log = EventLog(event_type=event_type, user_id=user_id, detail=detail)
+            session.add(log)
+            session.commit()
+    except Exception as e:
+        logger.warning(f"log_event gagal: {e}")
 
 
 def get_stats() -> dict:
@@ -151,14 +231,21 @@ def get_stats() -> dict:
         }
 
 
-def get_recent_reports(limit: int = 10):
+def get_recent_reports(limit: int = 10) -> List[ReportDTO]:
+    """Kembalikan laporan sebagai DTO agar aman setelah session ditutup."""
     with get_session() as session:
-        return session.query(Report).order_by(Report.created_at.desc()).limit(limit).all()
+        reports = (
+            session.query(Report)
+            .order_by(Report.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [_report_to_dto(r) for r in reports]
 
 
 def increment_chat_count(telegram_id: int):
     with get_session() as session:
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
         if user:
-            user.total_chats += 1
+            user.total_chats = (user.total_chats or 0) + 1
             session.commit()

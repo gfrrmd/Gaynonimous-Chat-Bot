@@ -2,10 +2,11 @@
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes
-from services.database import add_report, log_event, is_user_banned
+from services.database import add_report, log_event
 from services.state_manager import state
-from utils.keyboards import main_keyboard
-from utils.messages import REPORT_SENT, NOT_IN_CHAT
+from utils.keyboards import main_keyboard, admin_keyboard
+from utils.messages import REPORT_SENT, NOT_IN_CHAT, PARTNER_LEFT
+from config.settings import ADMIN_IDS
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +25,16 @@ async def report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await state.block_user(user.id, partner_id)
     await state.end_chat(user.id)
 
-    await update.message.reply_text(REPORT_SENT, parse_mode="Markdown", reply_markup=main_keyboard())
+    kb = admin_keyboard() if user.id in ADMIN_IDS else main_keyboard()
+    await update.message.reply_text(REPORT_SENT, parse_mode="Markdown", reply_markup=kb)
 
     try:
-        from utils.messages import PARTNER_LEFT
+        partner_kb = admin_keyboard() if partner_id in ADMIN_IDS else main_keyboard()
         await context.bot.send_message(
             chat_id=partner_id,
             text=PARTNER_LEFT,
             parse_mode="Markdown",
-            reply_markup=main_keyboard(),
+            reply_markup=partner_kb,
         )
     except Exception:
         pass

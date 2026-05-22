@@ -25,12 +25,14 @@ from handlers.profile import profile_handler, profile_callback
 from handlers.help import help_handler
 from handlers.admin import (
     admin_stats, admin_ban, admin_unban, admin_broadcast, admin_reports,
-    admin_panel_handler
+    admin_panel_handler,
 )
 from utils.keyboards import (
     BTN_FIND, BTN_NEXT, BTN_STOP, BTN_REPORT, BTN_PROFILE, BTN_HELP,
-    BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN, BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST
+    BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN,
+    BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST,
 )
+import re
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -45,6 +47,11 @@ async def post_init(application: Application):
     asyncio.create_task(cleanup_expired_media(bot))
     asyncio.create_task(queue_watcher(bot))
     logger.info("Background tasks dimulai.")
+
+
+def make_exact(text: str) -> str:
+    """Buat regex exact match yang aman untuk teks dengan emoji."""
+    return "^" + re.escape(text) + "$"
 
 
 def main():
@@ -63,36 +70,32 @@ def main():
 
     # ---- Command Handlers ----
     app.add_handler(CommandHandler("start", start_handler))
-
-    # Admin commands
     app.add_handler(CommandHandler("admin_stats", admin_stats))
     app.add_handler(CommandHandler("admin_ban", admin_ban))
     app.add_handler(CommandHandler("admin_unban", admin_unban))
     app.add_handler(CommandHandler("admin_broadcast", admin_broadcast))
     app.add_handler(CommandHandler("admin_reports", admin_reports))
 
-    # ---- ReplyKeyboard Button Handlers ----
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_FIND}$"), find_partner))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_NEXT}$"), next_partner))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_STOP}$"), stop_chat))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_REPORT}$"), report_handler))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_PROFILE}$"), profile_handler))
-    app.add_handler(MessageHandler(filters.Regex(f"^{BTN_HELP}$"), help_handler))
+    # ---- ReplyKeyboard Button Handlers (user biasa) ----
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_FIND)), find_partner))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_NEXT)), next_partner))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_STOP)), stop_chat))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_REPORT)), report_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_PROFILE)), profile_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_HELP)), help_handler))
 
-    # ---- Admin Button Handlers ----
-    admin_btns = [
-        BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN,
-        BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST
-    ]
-    admin_pattern = "^(" + "|".join(admin_btns) + ")$"
-    app.add_handler(MessageHandler(filters.Regex(admin_pattern), admin_panel_handler))
+    # ---- Admin Button Handlers (masing-masing terpisah) ----
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_ADMIN_STATS)), admin_panel_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_ADMIN_REPORTS)), admin_panel_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_ADMIN_BAN)), admin_panel_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_ADMIN_UNBAN)), admin_panel_handler))
+    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_ADMIN_BROADCAST)), admin_panel_handler))
 
     # ---- Callback Query Handlers ----
     app.add_handler(CallbackQueryHandler(media_callback, pattern="^(approve_media|reject_media):"))
     app.add_handler(CallbackQueryHandler(profile_callback, pattern="^profile_"))
 
-    # ---- Message Relay Handlers ----
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay_text))
+    # ---- Message Relay Handlers (HARUS paling bawah) ----
     app.add_handler(MessageHandler(filters.Sticker.ALL, relay_sticker))
     app.add_handler(MessageHandler(filters.VOICE, relay_voice))
     app.add_handler(MessageHandler(filters.AUDIO, relay_audio))
@@ -100,6 +103,8 @@ def main():
         filters.PHOTO | filters.VIDEO | filters.Document.ALL | filters.ANIMATION,
         handle_media_with_approval,
     ))
+    # TEXT relay paling AKHIR agar tidak menangkap button text
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay_text))
 
     logger.info("Bot berjalan...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
