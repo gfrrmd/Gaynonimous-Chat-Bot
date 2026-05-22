@@ -3,13 +3,14 @@ Admin handler.
 Semua perintah admin hanya bisa diakses oleh user yang ada di ADMIN_IDS.
 """
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from services.database import (
     get_stats, ban_user, unban_user, get_recent_reports, log_event
 )
 from services.state_manager import state
 from config.settings import ADMIN_IDS
+from utils.keyboards import BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN, BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,33 @@ def admin_only(func):
         return await func(update, context)
     wrapper.__name__ = func.__name__
     return wrapper
+
+
+async def admin_panel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler untuk tombol-tombol admin di ReplyKeyboard."""
+    user = update.effective_user
+    if not is_admin(user.id):
+        return
+    text = update.message.text
+    if text == BTN_ADMIN_STATS:
+        await admin_stats(update, context)
+    elif text == BTN_ADMIN_REPORTS:
+        await admin_reports(update, context)
+    elif text == BTN_ADMIN_BAN:
+        await update.message.reply_text(
+            "\U0001f6ab *Ban User*\nKirim: `/admin_ban <user_id> [alasan]`",
+            parse_mode="Markdown"
+        )
+    elif text == BTN_ADMIN_UNBAN:
+        await update.message.reply_text(
+            "\u2705 *Unban User*\nKirim: `/admin_unban <user_id>`",
+            parse_mode="Markdown"
+        )
+    elif text == BTN_ADMIN_BROADCAST:
+        await update.message.reply_text(
+            "\U0001f4e2 *Broadcast*\nKirim: `/admin_broadcast <pesan>`",
+            parse_mode="Markdown"
+        )
 
 
 @admin_only

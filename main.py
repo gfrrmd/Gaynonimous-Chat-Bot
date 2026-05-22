@@ -21,13 +21,15 @@ from handlers.message_relay import (
 )
 from handlers.media_approval import media_callback
 from handlers.report import report_handler
-from handlers.profile import profile_handler
+from handlers.profile import profile_handler, profile_callback
 from handlers.help import help_handler
 from handlers.admin import (
-    admin_stats, admin_ban, admin_unban, admin_broadcast, admin_reports
+    admin_stats, admin_ban, admin_unban, admin_broadcast, admin_reports,
+    admin_panel_handler
 )
 from utils.keyboards import (
-    BTN_FIND, BTN_NEXT, BTN_STOP, BTN_REPORT, BTN_PROFILE, BTN_HELP
+    BTN_FIND, BTN_NEXT, BTN_STOP, BTN_REPORT, BTN_PROFILE, BTN_HELP,
+    BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN, BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST
 )
 
 logging.basicConfig(
@@ -77,8 +79,17 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_PROFILE}$"), profile_handler))
     app.add_handler(MessageHandler(filters.Regex(f"^{BTN_HELP}$"), help_handler))
 
-    # ---- Media Approval Callback ----
+    # ---- Admin Button Handlers ----
+    admin_btns = [
+        BTN_ADMIN_STATS, BTN_ADMIN_REPORTS, BTN_ADMIN_BAN,
+        BTN_ADMIN_UNBAN, BTN_ADMIN_BROADCAST
+    ]
+    admin_pattern = "^(" + "|".join(admin_btns) + ")$"
+    app.add_handler(MessageHandler(filters.Regex(admin_pattern), admin_panel_handler))
+
+    # ---- Callback Query Handlers ----
     app.add_handler(CallbackQueryHandler(media_callback, pattern="^(approve_media|reject_media):"))
+    app.add_handler(CallbackQueryHandler(profile_callback, pattern="^profile_"))
 
     # ---- Message Relay Handlers ----
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, relay_text))
