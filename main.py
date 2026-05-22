@@ -9,7 +9,7 @@ from telegram.ext import (
     filters,
 )
 from config.settings import BOT_TOKEN, LOG_LEVEL
-from services.database import init_db
+from services.database import init_db, cleanup_old_logs
 from services.media_service import cleanup_expired_media
 from handlers.queue_watcher import queue_watcher
 
@@ -41,11 +41,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def log_cleanup_task():
+    """Background task: hapus event_logs > 5 hari, dijalankan tiap 24 jam."""
+    while True:
+        await asyncio.sleep(86400)
+        cleanup_old_logs(days=5)
+
+
 async def post_init(application: Application):
     """Jalankan background tasks setelah bot siap."""
     bot = application.bot
     asyncio.create_task(cleanup_expired_media(bot))
     asyncio.create_task(queue_watcher(bot))
+    asyncio.create_task(log_cleanup_task())
     logger.info("Background tasks dimulai.")
 
 

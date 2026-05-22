@@ -4,7 +4,7 @@ Database service - PostgreSQL (Railway) dan SQLite (local) dengan SQLAlchemy.
 import os
 import logging
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from typing import Optional, List
 from sqlalchemy import (
@@ -215,6 +215,18 @@ def log_event(event_type: str, user_id: int = None, detail: str = None):
             session.commit()
     except Exception as e:
         logger.warning(f"log_event gagal: {e}")
+
+
+def cleanup_old_logs(days: int = 5):
+    """Hapus event_logs yang lebih lama dari X hari."""
+    try:
+        with get_session() as session:
+            cutoff = datetime.utcnow() - timedelta(days=days)
+            deleted = session.query(EventLog).filter(EventLog.created_at < cutoff).delete()
+            session.commit()
+            logger.info(f"Cleaned up {deleted} old event logs (older than {days} days).")
+    except Exception as e:
+        logger.warning(f"cleanup_old_logs gagal: {e}")
 
 
 def get_stats() -> dict:
