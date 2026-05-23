@@ -6,7 +6,7 @@ import logging
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, CallbackQueryHandler,
-    filters,
+    ConversationHandler, filters,
 )
 from config.settings import BOT_TOKEN, LOG_LEVEL
 from services.database import init_db, cleanup_old_logs
@@ -20,7 +20,7 @@ from handlers.message_relay import (
     handle_media_with_approval,
 )
 from handlers.media_approval import media_callback
-from handlers.report import report_handler
+from handlers.report import report_handler, receive_reason, cancel_report, WAITING_REASON
 from handlers.profile import profile_handler, profile_callback
 from handlers.help import help_handler
 from handlers.admin import (
@@ -76,6 +76,21 @@ def main():
         .build()
     )
 
+    # ---- ConversationHandler: Report dengan alasan ----
+    report_conv = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex(make_exact(BTN_REPORT)), report_handler),
+        ],
+        states={
+            WAITING_REASON: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_reason),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_report)],
+        conversation_timeout=60,
+    )
+    app.add_handler(report_conv)
+
     # ---- Command Handlers ----
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("admin_stats", admin_stats))
@@ -88,7 +103,6 @@ def main():
     app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_FIND)), find_partner))
     app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_NEXT)), next_partner))
     app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_STOP)), stop_chat))
-    app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_REPORT)), report_handler))
     app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_PROFILE)), profile_handler))
     app.add_handler(MessageHandler(filters.Regex(make_exact(BTN_HELP)), help_handler))
 
